@@ -11,10 +11,15 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   count-rules:
     name: Count and Categorize Rules
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout repository
@@ -44,6 +49,8 @@ jobs:
   check-duplicates:
     name: Check for Duplicate IDs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout repository
@@ -98,6 +105,8 @@ jobs:
   check-file-naming:
     name: Check File Naming Conventions
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout repository
@@ -138,6 +147,8 @@ jobs:
     name: Generate Rule Index
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout repository
