@@ -1,7 +1,9 @@
 title: Example - Suspicious PowerShell Command Execution
 id: a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
 status: test
-description: This is an example Sigma rule that detects suspicious PowerShell command execution with encoding or obfuscation techniques
+description: >
+    This is an example Sigma rule that detects suspicious PowerShell command execution with encoding or
+    obfuscation techniques
 references:
     - https://attack.mitre.org/techniques/T1059/001/
     - https://github.com/SigmaHQ/sigma
