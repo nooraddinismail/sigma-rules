@@ -1,0 +1,258 @@
+name: Validate Sigma Rules
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'rules/**/*.yml'
+      - 'rules/**/*.yaml'
+      - 'schema/**'
+      - '.github/workflows/validate-sigma-rules.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'rules/**/*.yml'
+      - 'rules/**/*.yaml'
+      - 'schema/**'
+      - '.github/workflows/validate-sigma-rules.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-yaml:
+    name: Validate YAML Syntax
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yamllint pyyaml
+      
+      - name: Validate YAML syntax
+        run: |
+          set -e
+          yamllint -d "{extends: default, rules: {line-length: {max: 120}, document-start: disable}}" rules/ 2>&1 | tee yamllint.log || YAMLLINT_EXIT=$?
+          echo "Checking for YAML parsing errors..."
+          python -c "
+          import yaml
+          import sys
+          from pathlib import Path
+          
+          errors = []
+          for yaml_file in Path('rules').rglob('*.y*ml'):
+              try:
+                  with open(yaml_file, 'r') as f:
+                      yaml.safe_load(f)
+                  print(f'✓ {yaml_file}')
+              except yaml.YAMLError as e:
+                  errors.append(f'✗ {yaml_file}: {e}')
+                  print(f'✗ {yaml_file}: {e}')
+          
+          if errors:
+              print(f'\n{len(errors)} file(s) with YAML errors')
+              sys.exit(1)
+          else:
+              print('\nAll YAML files are valid')
+          " | tee yaml-validation.log
+          PYTHON_EXIT=${PIPESTATUS[0]}
+          
+          # Exit with failure if either check failed
+          if [ "${YAMLLINT_EXIT:-0}" -ne 0 ] || [ "$PYTHON_EXIT" -ne 0 ]; then
+            echo "YAML validation failed"
+            exit 1
+          fi
+      
+      - name: Upload validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yaml-validation-log
+          path: yaml-validation.log
+
+  validate-sigma-schema:
+    name: Validate Against Sigma Schema
+    runs-on: ubuntu-latest
+    needs: validate-yaml
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml jsonschema
+      
+      - name: Validate Sigma rules against schema
+        run: |
+          set -e
+          python -c "
+          import yaml
+          import json
+          import jsonschema
+          import sys
+          from pathlib import Path
+          
+          # Load schema
+          with open('schema/sigma-schema.json', 'r') as f:
+              schema = json.load(f)
+          
+          errors = []
+          warnings = []
+          valid_count = 0
+          
+          # Validate each rule
+          for rule_file in Path('rules').rglob('*.y*ml'):
+              if rule_file.name.startswith('.'):
+                  continue
+                  
+              try:
+                  with open(rule_file, 'r') as f:
+                      rule = yaml.safe_load(f)
+                  
+                  if not rule:
+                      warnings.append(f'⚠ {rule_file}: Empty file')
+                      continue
+                  
+                  # Validate against schema
+                  try:
+                      jsonschema.validate(instance=rule, schema=schema)
+                      print(f'✓ {rule_file}')
+                      valid_count += 1
+                  except jsonschema.exceptions.ValidationError as e:
+                      errors.append(f'✗ {rule_file}: {e.message}')
+                      print(f'✗ {rule_file}: {e.message}')
+              except Exception as e:
+                  errors.append(f'✗ {rule_file}: {str(e)}')
+                  print(f'✗ {rule_file}: {str(e)}')
+          
+          # Print summary
+          print(f'\n--- Validation Summary ---')
+          print(f'Valid rules: {valid_count}')
+          print(f'Warnings: {len(warnings)}')
+          print(f'Errors: {len(errors)}')
+          
+          if warnings:
+              print('\nWarnings:')
+              for w in warnings:
+                  print(w)
+          
+          if errors:
+              print('\nErrors:')
+              for e in errors:
+                  print(e)
+              sys.exit(1)
+          
+          print('\n✓ All Sigma rules are valid!')
+          " | tee schema-validation.log
+          exit ${PIPESTATUS[0]}
+      
+      - name: Upload validation log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-validation-log
+          path: schema-validation.log
+
+  check-rule-quality:
+    name: Check Rule Quality
+    runs-on: ubuntu-latest
+    needs: validate-yaml
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+      
+      - name: Check rule quality
+        run: |
+          python -c "
+          import yaml
+          import sys
+          from pathlib import Path
+          
+          issues = []
+          
+          for rule_file in Path('rules').rglob('*.y*ml'):
+              if rule_file.name.startswith('.'):
+                  continue
+                  
+              try:
+                  with open(rule_file, 'r') as f:
+                      rule = yaml.safe_load(f)
+                  
+                  if not rule:
+                      continue
+                  
+                  # Check for best practices
+                  if 'author' not in rule:
+                      issues.append(f'⚠ {rule_file}: Missing author field')
+                  
+                  if 'date' not in rule:
+                      issues.append(f'⚠ {rule_file}: Missing date field')
+                  
+                  if 'level' not in rule:
+                      issues.append(f'⚠ {rule_file}: Missing level field')
+                  
+                  if 'falsepositives' not in rule:
+                      issues.append(f'⚠ {rule_file}: Missing falsepositives field')
+                  
+                  if 'references' not in rule or not rule.get('references'):
+                      issues.append(f'⚠ {rule_file}: Missing or empty references field')
+                  
+                  if 'tags' not in rule or not rule.get('tags'):
+                      issues.append(f'⚠ {rule_file}: Missing or empty tags field')
+                  
+              except Exception as e:
+                  print(f'Error processing {rule_file}: {e}')
+          
+          if issues:
+              print('Quality Check Issues (non-blocking):')
+              for issue in issues:
+                  print(issue)
+              print(f'\nTotal: {len(issues)} quality issues found')
+          else:
+              print('✓ No quality issues found')
+          " | tee quality-check.log
+      
+      - name: Upload quality check log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-check-log
+          path: quality-check.log

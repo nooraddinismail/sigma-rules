@@ -1,0 +1,221 @@
+name: Sigma Rules CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  count-rules:
+    name: Count and Categorize Rules
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Count rules by category
+        run: |
+          echo "## Rule Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Category | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          
+          for dir in rules/*/; do
+            if [ -d "$dir" ]; then
+              category=$(basename "$dir")
+              count=$(find "$dir" -name "*.yml" -o -name "*.yaml" | wc -l)
+              echo "| $category | $count |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          total=$(find rules/ -name "*.yml" -o -name "*.yaml" | wc -l)
+          echo "| **Total** | **$total** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "Total Sigma rules: $total"
+
+  check-duplicates:
+    name: Check for Duplicate IDs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+      
+      - name: Check for duplicate rule IDs
+        run: |
+          python -c "
+          import yaml
+          import sys
+          from pathlib import Path
+          from collections import defaultdict
+          
+          rule_ids = defaultdict(list)
+          
+          for rule_file in Path('rules').rglob('*.y*ml'):
+              if rule_file.name.startswith('.'):
+                  continue
+                  
+              try:
+                  with open(rule_file, 'r') as f:
+                      rule = yaml.safe_load(f)
+                  
+                  if rule and 'id' in rule:
+                      rule_ids[rule['id']].append(str(rule_file))
+              except Exception as e:
+                  print(f'Error processing {rule_file}: {e}')
+          
+          duplicates = {k: v for k, v in rule_ids.items() if len(v) > 1}
+          
+          if duplicates:
+              print('⚠ Duplicate rule IDs found:')
+              for rule_id, files in duplicates.items():
+                  print(f'  ID {rule_id} found in:')
+                  for file in files:
+                      print(f'    - {file}')
+              sys.exit(1)
+          else:
+              print('✓ No duplicate rule IDs found')
+          "
+
+  check-file-naming:
+    name: Check File Naming Conventions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Check file naming
+        run: |
+          python -c "
+          import sys
+          from pathlib import Path
+          
+          issues = []
+          
+          for rule_file in Path('rules').rglob('*.y*ml'):
+              if rule_file.name.startswith('.'):
+                  continue
+              
+              filename = rule_file.stem
+              
+              # Check for spaces (should use underscores or hyphens)
+              if ' ' in filename:
+                  issues.append(f'⚠ {rule_file}: Filename contains spaces')
+              
+              # Check for special characters
+              if not all(c.isalnum() or c in '-_' for c in filename):
+                  issues.append(f'⚠ {rule_file}: Filename contains special characters')
+          
+          if issues:
+              print('File naming convention issues (non-blocking):')
+              for issue in issues:
+                  print(issue)
+              print(f'\nTotal: {len(issues)} naming issues found')
+          else:
+              print('✓ All files follow naming conventions')
+          "
+
+  generate-index:
+    name: Generate Rule Index
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+      
+      - name: Generate rule index
+        run: |
+          python -c "
+          import yaml
+          from pathlib import Path
+          from datetime import datetime
+          
+          print('# Sigma Rules Index')
+          print(f'\nGenerated: {datetime.utcnow().strftime(\"%Y-%m-%d %H:%M:%S\")} UTC')
+          print(f'\n## Rules by Category\n')
+          
+          categories = {}
+          
+          for rule_file in sorted(Path('rules').rglob('*.y*ml')):
+              if rule_file.name.startswith('.'):
+                  continue
+                  
+              try:
+                  with open(rule_file, 'r') as f:
+                      rule = yaml.safe_load(f)
+                  
+                  if not rule:
+                      continue
+                  
+                  category = rule_file.parent.name
+                  if category not in categories:
+                      categories[category] = []
+                  
+                  categories[category].append({
+                      'file': str(rule_file),
+                      'title': rule.get('title', 'Untitled'),
+                      'level': rule.get('level', 'unknown'),
+                      'status': rule.get('status', 'unknown')
+                  })
+              except Exception as e:
+                  print(f'Error processing {rule_file}: {e}')
+          
+          for category in sorted(categories.keys()):
+              print(f'### {category.capitalize()}')
+              print()
+              for rule in categories[category]:
+                  print(f'- **{rule[\"title\"]}**')
+                  print(f'  - File: \`{rule[\"file\"]}\`')
+                  print(f'  - Level: {rule[\"level\"]} | Status: {rule[\"status\"]}')
+              print()
+          
+          total = sum(len(rules) for rules in categories.values())
+          print(f'\n---\nTotal Rules: {total}')
+          " > RULES_INDEX.md
+      
+      - name: Upload index as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rules-index
+          path: RULES_INDEX.md

@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/SigmaHQ/sigma/blob/master/sigma-schema.json",
+  "title": "Sigma Rule Schema",
+  "description": "JSON Schema for validating Sigma detection rules",
+  "type": "object",
+  "required": ["title", "id", "status", "description", "logsource", "detection"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "A brief title for the rule"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "A unique UUID for the rule"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["stable", "test", "experimental", "deprecated", "unsupported"],
+      "description": "Rule status"
+    },
+    "description": {
+      "type": "string",
+      "description": "A detailed description of what the rule detects"
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "References to external sources"
+    },
+    "author": {
+      "type": "string",
+      "description": "Rule author(s)"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}/[0-9]{2}/[0-9]{2}$",
+      "description": "Creation date in YYYY/MM/DD format"
+    },
+    "modified": {
+      "type": "string",
+      "pattern": "^[0-9]{4}/[0-9]{2}/[0-9]{2}$",
+      "description": "Last modification date in YYYY/MM/DD format"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorizing the rule (MITRE ATT&CK, etc.)"
+    },
+    "logsource": {
+      "type": "object",
+      "description": "Log source definition",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        }
+      }
+    },
+    "detection": {
+      "type": "object",
+      "description": "Detection logic",
+      "required": ["condition"],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "description": "Detection condition expression"
+        }
+      },
+      "additionalProperties": true
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of fields to include in the output"
+    },
+    "falsepositives": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Known false positive scenarios"
+    },
+    "level": {
+      "type": "string",
+      "enum": ["informational", "low", "medium", "high", "critical"],
+      "description": "Rule severity level"
+    },
+    "related": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["derived", "obsoletes", "merged", "renamed", "similar"]
+          }
+        },
+        "required": ["id", "type"]
+      },
+      "description": "Related rule definitions"
+    }
+  },
+  "additionalProperties": false
+}
