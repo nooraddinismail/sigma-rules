@@ -2,6 +2,8 @@
 
 This repository contains a collection of Sigma detection rules for security monitoring and threat detection. Sigma is a generic and open signature format that allows you to describe relevant log events in a straightforward manner.
 
+> 📚 **New to Sigma rules?** Check out the [Quick Start Guide](docs/QUICK_START.md) to create your first rule in minutes!
+
 ## 📁 Repository Structure
 
 ```
