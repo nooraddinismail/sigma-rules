@@ -26,7 +26,7 @@ You can also validate rules manually using tools like `check-jsonschema` or `ajv
 ```bash
 # Using check-jsonschema
 pip install check-jsonschema
-check-jsonschema --schemafile schema/sigma-schema.json rules/**/*.yml
+check-jsonschema --schema-file schema/sigma-schema.json rules/**/*.yml
 
 # Using ajv-cli (requires converting YAML to JSON first)
 npm install -g ajv-cli
